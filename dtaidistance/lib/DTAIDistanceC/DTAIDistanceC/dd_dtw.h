@@ -36,6 +36,7 @@ static int printPrecision = 3;
 /**
 Settings for DTW operations:
  
+@field dist : Distance function, 0 stands for euclidean and 1 stands for derivative.
 @field window : Window size; expressed as distance to a single side, thus
        the total window size will be window*2 + 1.
 @field max_dist : Maximal distance, avoid computing cells that have a larger value.
@@ -52,6 +53,7 @@ Settings for DTW operations:
 @field only_ub : Only compute the upper bound (Euclidean) and return that value.
  */
 struct DTWSettings_s {
+    idx_t dist;
     idx_t window;
     seq_t max_dist;
     seq_t max_step;
@@ -60,7 +62,6 @@ struct DTWSettings_s {
     idx_t psi;
     bool use_pruning;
     bool only_ub;
-    
 };
 typedef struct DTWSettings_s DTWSettings;
 
@@ -91,6 +92,7 @@ typedef seq_t (*DTWFnPtr)(seq_t *s1, idx_t l1, seq_t *s2, idx_t l2, DTWSettings 
 seq_t dtw_distance(seq_t *s1, idx_t l1, seq_t *s2, idx_t l2, DTWSettings *settings);
 seq_t dtw_distance_ndim(seq_t *s1, idx_t l1, seq_t *s2, idx_t l2, int ndim, DTWSettings *settings);
 seq_t dtw_warping_paths(seq_t *wps, seq_t *s1, idx_t l1, seq_t *s2, idx_t l2, bool return_dtw, bool do_sqrt, DTWSettings *settings);
+seq_t dtw_f_distance(seq_t *wps, idx_t l1, idx_t l2);
 
 // Bound
 seq_t ub_euclidean(seq_t *s1, idx_t l1, seq_t *s2, idx_t l2);

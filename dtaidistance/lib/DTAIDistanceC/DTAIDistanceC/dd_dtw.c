@@ -16,6 +16,7 @@
 /* Create settings struct with default values (all extras deactivated). */
 DTWSettings dtw_settings_default(void) {
     DTWSettings s = {
+        .dist = 0,
         .window = 0,
         .max_dist = 0,
         .max_step = 0,
@@ -30,6 +31,7 @@ DTWSettings dtw_settings_default(void) {
 
 void dtw_settings_print(DTWSettings *settings) {
     printf("DTWSettings {\n");
+    printf("  dist = %zu\n", settings->dist);
     printf("  window = %zu\n", settings->window);
     printf("  max_dist = %f\n", settings->max_dist);
     printf("  max_step = %f\n", settings->max_step);
@@ -39,6 +41,32 @@ void dtw_settings_print(DTWSettings *settings) {
     printf("  use_pruning = %d\n", settings->use_pruning);
     printf("  only_ub = %d\n", settings->only_ub);
     printf("}\n");
+}
+
+seq_t derivative(seq_t *s, idx_t l, idx_t i) {
+    if (l == 0) {
+        printf("Zero length sequence\n");
+    }
+    idx_t i_m1, i_p1;
+    if (i == 0) {
+        i_m1 = 0;
+    }
+    else {
+        i_m1 = i - 1;
+    }
+    if (i == l - 1) {
+        i_p1 = l - 1;
+    }
+    else {
+        i_p1 = i + 1;
+    }
+    return ((s[i] - s[i_m1]) + ((s[i_p1] - s[i_m1]) / 2)) / 2;
+}
+
+seq_t derivative_dist(seq_t *s1, idx_t l1, idx_t i, seq_t *s2, idx_t l2, idx_t j) {
+    seq_t d1 = derivative(s1, l1, i);
+    seq_t d2 = derivative(s2, l2, j);
+    return (d1 - d2) * (d1 - d2);
 }
 
 // MARK: DTW
@@ -65,6 +93,7 @@ seq_t dtw_distance(seq_t *s1, idx_t l1,
     idx_t ec_next;
     signal(SIGINT, dtw_int_handler);
     
+    idx_t dist = settings->dist;
     idx_t window = settings->window;
     seq_t max_step = settings->max_step;
     seq_t max_dist = settings->max_dist;
@@ -184,7 +213,15 @@ seq_t dtw_distance(seq_t *s1, idx_t l1,
             #ifdef DTWDEBUG
             printf("ri=%zu,ci=%zu, s1[i] = s1[%zu] = %f , s2[j] = s2[%zu] = %f\n", i, j, i, s1[i], j, s2[j]);
             #endif
-            d = EDIST(s1[i], s2[j]);
+            if (dist == 0) {
+                d = EDIST(s1[i], s2[j]);
+            }
+            else if (dist == 1) {
+                d = derivative_dist(s1, l1, i, s2, l2, j);
+            }
+            else {
+                printf("Unsupported distance\n");
+            }
             if (d > max_step) {
                 // Let the value be INFINITY as initialized
                 continue;
@@ -508,10 +545,10 @@ Compute all warping paths between two series.
 @return The dtw value if return_dtw is true; Otherwise -1.
 */
 seq_t dtw_warping_paths(seq_t *wps,
-                         seq_t *s1, idx_t l1,
-                         seq_t *s2, idx_t l2,
-                         bool return_dtw, bool do_sqrt,
-                         DTWSettings *settings) {
+                        seq_t *s1, idx_t l1,
+                        seq_t *s2, idx_t l2,
+                        bool return_dtw, bool do_sqrt,
+                        DTWSettings *settings) {
     idx_t ldiff;
     // DTWPruned
     idx_t sc = 0;
@@ -521,6 +558,7 @@ seq_t dtw_warping_paths(seq_t *wps,
     seq_t rvalue = 1;
     signal(SIGINT, dtw_int_handler);
     
+    idx_t dist = settings->dist;
     idx_t window = settings->window;
     seq_t max_step = settings->max_step;
     seq_t max_dist = settings->max_dist; // upper bound
@@ -620,7 +658,15 @@ seq_t dtw_warping_paths(seq_t *wps,
             #ifdef DTWDEBUG
             printf("ri=%zu, ci=%zu, s1[i/%zu]=%f , s2[j/%zu]=%f\n", i, j, i, s1[i], j, s2[j]);
             #endif
-            d = EDIST(s1[i], s2[j]);
+            if (dist == 0) {
+                d = EDIST(s1[i], s2[j]);
+            }
+            else if (dist == 1) {
+                d = derivative_dist(s1, l1, i, s2, l2, j);
+            }
+            else {
+                printf("Unsupported distance\n");
+            }
             if (d > max_step) {
                 continue;
             }
@@ -710,6 +756,73 @@ seq_t dtw_warping_paths(seq_t *wps,
         rvalue = INFINITY;
     }
     return rvalue;
+}
+
+
+idx_t argmin3(seq_t a, seq_t b, seq_t c) {
+    seq_t min = a, arg = 0;
+    if (b < min) {
+        min = b;
+        arg = 1;
+    }
+    if (c < min) {
+        arg = 2;
+    }
+    return arg;
+}
+
+
+seq_t dtw_f_distance(seq_t *wps,
+                     idx_t l1, idx_t l2) {
+    // Compute best path
+    idx_t *path_i = (idx_t *)malloc(sizeof(idx_t) * (l1 + l2));
+    idx_t *path_j = (idx_t *)malloc(sizeof(idx_t) * (l1 + l2));
+    idx_t i = l1;
+    idx_t j = l2;
+    idx_t len = 0;
+    idx_t arg = 0;
+
+    path_i[len] = l1 - 1;
+    path_j[len] = l2 - 1;
+    ++len;
+    while (i > 0 && j > 0) {
+        arg = argmin3(wps[i * (l2 + 1) + (j - 1)], wps[(i - 1) * (l2 + 1) + j], wps[(i - 1) * (l2 + 1) + (j - 1)]);
+        if (arg == 2) {
+            i -= 1;
+            j -= 1;
+        }
+        else if (arg == 1) {
+            i -= 1;
+        }
+        else {
+            j -= 1;
+        }
+        path_i[len] = i - 1;
+        path_j[len] = j - 1;
+        ++len;
+    }
+
+    // Compute warping ratio
+    seq_t sum_c = 0;
+    seq_t sum_e = 0;
+    seq_t max_c = path_i[0];
+    seq_t max_e = path_j[0];
+
+    for (idx_t k = len - 1 - 1 - 1; k >= 0; k--) {
+        // Compressions
+        if (path_j[k + 1] == path_j[k]) {
+            sum_c += 1;
+        }
+        // Expansions
+        else if (path_i[k + 1] == path_i[k]) {
+            sum_e += 1;
+        }
+    }
+
+    free(path_i);
+    free(path_j);
+    
+    return (sum_c + sum_e) / (max_c + max_e);
 }
 
 
