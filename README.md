@@ -1,3 +1,10 @@
+# F-distance support based on dtaidistance-2.0.6
+
+## Installation
+
+    $ python setup.py build_ext --inplace
+    $ python setup.py install
+
 # Time Series Distances
 
 Library for time series distances (e.g. Dynamic Time Warping) used in the
