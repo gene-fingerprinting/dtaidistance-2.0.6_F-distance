@@ -120,11 +120,28 @@ def ub_euclidean(s1, s2):
     """ See ed.euclidean_distance"""
     return ed.distance(s1, s2)
 
+def derivative(x, i):
+    # akin to the derivative of sequence x at index i
+    if len(x) == 0:
+        raise Exception('Invalid sequence')
+    if i == 0:
+        i_m1 = 0
+    else:
+        i_m1 = i - 1
+    if i == len(x) - 1:
+        i_p1 = len(x) - 1
+    else:
+        i_p1 = i + 1
+    return ((x[i] - x[i_m1]) + ((x[i_p1] - x[i_m1])/2))/2
 
-def distance(s1, s2,
+def derivative_dist(x, y, i, j):
+        return (derivative(x, i) - derivative(y, j))**2
+
+
+def distance(s1, s2, dist='euclidean',
              window=None, max_dist=None, max_step=None,
              max_length_diff=None, penalty=None, psi=None,
-             use_c=False, use_pruning=False, only_ub=False):
+             use_c=True, use_pruning=False, only_ub=False):
     """
     Dynamic Time Warping.
 
@@ -151,7 +168,7 @@ def distance(s1, s2,
         if dtw_cc is None:
             logger.warning("C-library not available, using the Python version")
         else:
-            return distance_fast(s1, s2, window,
+            return distance_fast(s1, s2, dist, window,
                                  max_dist=max_dist,
                                  max_step=max_step,
                                  max_length_diff=max_length_diff,
@@ -168,7 +185,7 @@ def distance(s1, s2,
         max_step = inf
     else:
         max_step *= max_step
-    if use_pruning or only_ub:
+    if (use_pruning or only_ub) and dist == 'euclidean':
         max_dist = ub_euclidean(s1, s2)**2
         if only_ub:
             return max_dist
@@ -215,7 +232,12 @@ def distance(s1, s2,
         if psi != 0 and j_start == 0 and i < psi:
             dtw[i1 * length] = 0
         for j in range(j_start, j_end):
-            d = (s1[i] - s2[j])**2
+            if dist == 'euclidean':
+                d = (s1[i] - s2[j])**2
+            elif dist == 'derivative':
+                d = derivative_dist(s1, s2, i, j)
+            else:
+                raise Exception('Unsupported distance')
             if d > max_step:
                 continue
             assert j + 1 - skip >= 0
@@ -252,7 +274,7 @@ def distance(s1, s2,
     return d
 
 
-def distance_fast(s1, s2, window=None, max_dist=None,
+def distance_fast(s1, s2, dist='euclidean', window=None, max_dist=None,
                   max_step=None, max_length_diff=None, penalty=None, psi=None, use_pruning=False, only_ub=False):
     """Fast C version of :meth:`distance`.
 
@@ -264,8 +286,14 @@ def distance_fast(s1, s2, window=None, max_dist=None,
     # Check that Numpy arrays for C contiguous
     s1 = util_numpy.verify_np_array(s1)
     s2 = util_numpy.verify_np_array(s2)
+    if dist == 'euclidean':
+        dist = 0
+    elif dist == 'derivative':
+        dist = 1
+    else:
+        raise Exception('Unsupported distance')
     # Move data to C library
-    d = dtw_cc.distance(s1, s2,
+    d = dtw_cc.distance(s1, s2, dist=dist,
                         window=window,
                         max_dist=max_dist,
                         max_step=max_step,
@@ -285,8 +313,8 @@ def _distance_c_with_params(t):
     return dtw_cc.distance(t[0], t[1], **t[2])
 
 
-def warping_paths(s1, s2, window=None, max_dist=None,
-                  max_step=None, max_length_diff=None, penalty=None, psi=None):
+def warping_paths(s1, s2, dist='euclidean', window=None, max_dist=None,
+                  max_step=None, max_length_diff=None, penalty=None, psi=None, use_c=False):
     """
     Dynamic Time Warping.
 
@@ -302,6 +330,16 @@ def warping_paths(s1, s2, window=None, max_dist=None,
     :param psi: see :meth:`distance`
     :returns: (DTW distance, DTW matrix)
     """
+    if use_c:
+        if dtw_cc is None:
+            logger.warning("C-library not available, using the Python version")
+        else:
+            return warping_paths_fast(s1, s2, dist, window,
+                                      max_dist=max_dist,
+                                      max_step=max_step,
+                                      max_length_diff=max_length_diff,
+                                      penalty=penalty,
+                                      psi=psi)
     if np is None:
         raise NumpyException("Numpy is required for the warping_paths method")
     r, c = len(s1), len(s2)
@@ -354,7 +392,12 @@ def warping_paths(s1, s2, window=None, max_dist=None,
         #                                                y)
         for j in range(j_start, j_end):
             # print('j =', j, 'max=',min(c, c - r + i + window))
-            d = (s1[i] - s2[j])**2
+            if dist == 'euclidean':
+                d = (s1[i] - s2[j])**2
+            elif dist == 'derivative':
+                d = derivative_dist(s1, s2, i, j)
+            else:
+                raise Exception('Unsupported distance')
             if max_step is not None and d > max_step:
                 continue
             # print(i, j + 1 - skip, j - skipp, j + 1 - skipp, j - skip)
@@ -391,11 +434,17 @@ def warping_paths(s1, s2, window=None, max_dist=None,
     return d, dtw
 
 
-def warping_paths_fast(s1, s2, window=None, max_dist=None,
+def warping_paths_fast(s1, s2, dist='euclidean', window=None, max_dist=None,
                        max_step=None, max_length_diff=None, penalty=None, psi=None):
     """Fast C version of :meth:`warping_paths`."""
     s1 = util_numpy.verify_np_array(s1)
     s2 = util_numpy.verify_np_array(s2)
+    if dist == 'euclidean':
+        dist = 0
+    elif dist == 'derivative':
+        dist = 1
+    else:
+        raise Exception('Unsupported distance')
     r = len(s1)
     c = len(s2)
     _check_library(raise_exception=True)
@@ -412,7 +461,7 @@ def warping_paths_fast(s1, s2, window=None, max_dist=None,
     if psi is None:
         psi = 0
     dtw = np.full((r + 1, c + 1), inf)
-    d = dtw_cc.warping_paths(dtw, s1, s2,
+    d = dtw_cc.warping_paths(dtw, s1, s2, dist=dist,
                              window=window,
                              max_dist=max_dist,
                              max_step=max_step,
@@ -634,6 +683,53 @@ def distance_matrix_fast(s, max_dist=None, max_length_diff=None,
                            use_c=True, show_progress=False)
 
 
+def best_path(paths):
+    """Compute the optimal path from the nxm warping paths matrix."""
+    i, j = int(paths.shape[0] - 1), int(paths.shape[1] - 1)
+    p = []
+    if paths[i, j] != -1:
+        p.append((i - 1, j - 1))
+    while i > 0 and j > 0:
+        # c = argmin([paths[i - 1, j - 1], paths[i - 1, j], paths[i, j - 1]])
+        c = argmin([paths[i, j - 1], paths[i - 1, j], paths[i - 1, j - 1]])
+        # if c == 0:
+        if c == 2:
+            i, j = i - 1, j - 1
+        elif c == 1:
+            i = i - 1
+        # elif c == 2:
+        elif c == 0:
+            j = j - 1
+        if paths[i, j] != -1:
+            p.append((i - 1, j - 1))
+    p.pop()
+    p.reverse()
+    return p
+
+
+def best_path2(paths):
+    """Compute the optimal path from the nxm warping paths matrix."""
+    m = paths
+    path = []
+    r, c = m.shape
+    r -= 1
+    c -= 1
+    v = m[r, c]
+    path.append((r - 1, c - 1))
+    while r > 1 or c > 1:
+        r_c, c_c = r, c
+        if r >= 1 and c >= 1 and m[r - 1, c - 1] <= v:
+            r_c, c_c, v = r - 1, c - 1, m[r - 1, c - 1]
+        if r >= 1 and m[r - 1, c] <= v:
+            r_c, c_c, v = r - 1, c, m[r - 1, c]
+        if c >= 1 and m[r, c - 1] <= v:
+            r_c, c_c, v = r, c - 1, m[r, c - 1]
+        path.append((r_c - 1, c_c - 1))
+        r, c = r_c, c_c
+    path.reverse()
+    return path
+
+
 def warping_path(from_s, to_s, **kwargs):
     """Compute warping path between two sequences."""
     dist, paths = warping_paths(from_s, to_s, **kwargs)
@@ -657,6 +753,30 @@ def warping_amount(path):
             n += 1
 
     return n
+
+
+def f_distance(path):
+    sum_c = sum_e = 0
+    max_c, max_e = path[-1]
+    
+    for i in range(1, len(path)):
+        if path[i - 1][1] == path[i][1]:
+            sum_c += 1
+        elif path[i - 1][0] == path[i][0]:
+            sum_e += 1
+
+    return (sum_c + sum_e) / (max_c + max_e)
+
+
+def F_distance(s1, s2, dist='derivative', use_c=True):
+    """Compute the F-distance of two sequences."""
+    _, paths = warping_paths(s1, s2, dist=dist, use_c=use_c)
+    if use_c:
+        d = dtw_cc.f_distance(paths)
+    else:
+        path = best_path(paths)
+        d = f_distance(path)
+    return d
 
 
 def warping_path_penalty(s1, s2, penalty_post=0, **kwargs):
@@ -710,46 +830,3 @@ def warp(from_s, to_s, path=None, **kwargs):
         from_s2[i] /= from_s2_cnt[i]
     return from_s2, path
 
-
-def best_path(paths):
-    """Compute the optimal path from the nxm warping paths matrix."""
-    i, j = int(paths.shape[0] - 1), int(paths.shape[1] - 1)
-    p = []
-    if paths[i, j] != -1:
-        p.append((i - 1, j - 1))
-    while i > 0 and j > 0:
-        c = argmin([paths[i - 1, j - 1], paths[i - 1, j], paths[i, j - 1]])
-        if c == 0:
-            i, j = i - 1, j - 1
-        elif c == 1:
-            i = i - 1
-        elif c == 2:
-            j = j - 1
-        if paths[i, j] != -1:
-            p.append((i - 1, j - 1))
-    p.pop()
-    p.reverse()
-    return p
-
-
-def best_path2(paths):
-    """Compute the optimal path from the nxm warping paths matrix."""
-    m = paths
-    path = []
-    r, c = m.shape
-    r -= 1
-    c -= 1
-    v = m[r, c]
-    path.append((r - 1, c - 1))
-    while r > 1 or c > 1:
-        r_c, c_c = r, c
-        if r >= 1 and c >= 1 and m[r - 1, c - 1] <= v:
-            r_c, c_c, v = r - 1, c - 1, m[r - 1, c - 1]
-        if r >= 1 and m[r - 1, c] <= v:
-            r_c, c_c, v = r - 1, c, m[r - 1, c]
-        if c >= 1 and m[r, c - 1] <= v:
-            r_c, c_c, v = r, c - 1, m[r, c - 1]
-        path.append((r_c - 1, c_c - 1))
-        r, c = r_c, c_c
-    path.reverse()
-    return path

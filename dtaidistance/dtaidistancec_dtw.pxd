@@ -4,6 +4,7 @@ from dtaidistancec_globals cimport seq_t
 
 cdef extern from "dd_dtw.h":
     ctypedef struct DTWSettings:
+        size_t dist
         size_t window
         seq_t max_dist
         seq_t max_step
@@ -28,6 +29,7 @@ cdef extern from "dd_dtw.h":
                                DTWSettings *settings)
     seq_t dtw_warping_paths(seq_t *wps, seq_t *s1, size_t l1, seq_t *s2, int l2,
                                bint return_dtw, bint do_sqrt, DTWSettings *settings)
+    seq_t dtw_f_distance(seq_t *wps, size_t l1, size_t l2)
 
     seq_t ub_euclidean(seq_t *s1, size_t l1, seq_t *s2, size_t l2)
     seq_t ub_euclidean_ndim(seq_t *s1, size_t l1, seq_t *s2, size_t l2, int ndim)

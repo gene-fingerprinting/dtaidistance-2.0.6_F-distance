@@ -64,6 +64,11 @@ cdef class DTWSettings:
 
     def __init__(self, **kwargs):
         self._settings = dtaidistancec_dtw.dtw_settings_default()
+        if "dist" in kwargs:
+            if kwargs["dist"] is None:
+                self._settings.dist = 0
+            else:
+                self._settings.dist = kwargs["dist"]
         if "window" in kwargs:
             if kwargs["window"] is None:
                 self._settings.window = 0
@@ -106,6 +111,10 @@ cdef class DTWSettings:
                 self._settings.only_ub = kwargs["only_ub"]
 
     @property
+    def dist(self):
+        return self._settings.dist
+    
+    @property
     def window(self):
         return self._settings.window
 
@@ -140,6 +149,7 @@ cdef class DTWSettings:
     def __str__(self):
         return (
             "DTWSettings {\n"
+            f"  dist = {self.dist}\n"
             f"  window = {self.window}\n"
             f"  max_dist = {self.max_dist}\n"
             f"  max_step = {self.max_step}\n"
@@ -298,6 +308,11 @@ def warping_paths(double[:, :] dtw, double[:] s1, double[:] s2, **kwargs):
     settings = DTWSettings(**kwargs)
     return dtaidistancec_dtw.dtw_warping_paths(&dtw[0, 0], &s1[0], len(s1), &s2[0], len(s2),
                                            True, True, &settings._settings)
+
+
+def f_distance(double[:, :] dtw):
+    # Assumes C contiguous
+    return dtaidistancec_dtw.dtw_f_distance(&dtw[0, 0], dtw.shape[0]-1, dtw.shape[1]-1)
 
 
 def distance_matrix(cur, block=None, **kwargs):
