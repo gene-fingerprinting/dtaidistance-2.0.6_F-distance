@@ -690,15 +690,12 @@ def best_path(paths):
     if paths[i, j] != -1:
         p.append((i - 1, j - 1))
     while i > 0 and j > 0:
-        # c = argmin([paths[i - 1, j - 1], paths[i - 1, j], paths[i, j - 1]])
-        c = argmin([paths[i, j - 1], paths[i - 1, j], paths[i - 1, j - 1]])
-        # if c == 0:
-        if c == 2:
+        c = argmin([paths[i - 1, j - 1], paths[i - 1, j], paths[i, j - 1]])
+        if c == 0:
             i, j = i - 1, j - 1
         elif c == 1:
             i = i - 1
-        # elif c == 2:
-        elif c == 0:
+        elif c == 2:
             j = j - 1
         if paths[i, j] != -1:
             p.append((i - 1, j - 1))
