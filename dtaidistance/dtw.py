@@ -768,9 +768,9 @@ def f_distance(path):
     return (sum_c + sum_e) / (max_c + max_e)
 
 
-def F_distance(s1, s2, dist='derivative', use_c=True):
+def F_distance(s1, s2, dist='derivative', window=None, use_c=True):
     """Compute the F-distance of two sequences."""
-    _, paths = warping_paths(s1, s2, dist=dist, use_c=use_c)
+    _, paths = warping_paths(s1, s2, dist=dist, window=window, use_c=use_c)
     if use_c:
         d = dtw_cc.f_distance(paths)
     else:
